@@ -2,7 +2,7 @@ import * as Yup from 'yup';
 import Deliverymen from '../models/Deliverymen';
 import File from '../models/File';
 
-class DeliverymenController {
+class DeliverymanFeaturesController {
   async index(req, res) {
     const { page = 1 } = req.query;
     const deliveryman = await Deliverymen.findAll({
@@ -101,4 +101,4 @@ class DeliverymenController {
   }
 }
 
-export default new DeliverymenController();
+export default new DeliverymanFeaturesController();

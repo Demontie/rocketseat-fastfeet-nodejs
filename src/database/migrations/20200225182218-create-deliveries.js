@@ -21,6 +21,11 @@ module.exports = {
         onDelete: 'SET NULL',
         allowNull: false,
       },
+      product: {
+        type: Sequelize.STRING,
+        defaultValue: false,
+        allowNull: false,
+      },
       signature_id: {
         type: Sequelize.INTEGER,
         references: { model: 'files', key: 'id' },
@@ -28,17 +33,11 @@ module.exports = {
         onDelete: 'SET NULL',
         allowNull: true,
       },
-      product: {
-        type: Sequelize.STRING,
-        defaultValue: false,
-        allowNull: false,
-      },
       canceled_at: {
         type: Sequelize.DATE,
       },
       start_date: {
         type: Sequelize.DATE,
-        allowNull: false,
       },
       end_date: {
         type: Sequelize.DATE,
