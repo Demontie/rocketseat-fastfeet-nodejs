@@ -4,6 +4,8 @@ import Delivery from '../models/Delivery';
 import Deliverymen from '../models/Deliverymen';
 import File from '../models/File';
 import Recipient from '../models/Recipient';
+import Queue from '../../lib/Queue';
+import DeliveryAvailable from '../jobs/DeliveryAvailableMail';
 
 class DeliveryController {
   async index(req, res) {
@@ -73,6 +75,12 @@ class DeliveryController {
       product,
       recipient_id,
       deliveryman_id,
+    });
+
+    await Queue.add(DeliveryAvailable.key, {
+      product,
+      deliveryman,
+      recipient,
     });
 
     return res.json({ id, product, recipient_id, deliveryman_id });

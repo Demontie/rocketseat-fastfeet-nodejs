@@ -1,103 +1,128 @@
-import * as Yup from 'yup';
+import { Op } from 'sequelize';
+import { startOfDay, endOfDay, getHours } from 'date-fns';
 import Deliverymen from '../models/Deliverymen';
+import Delivery from '../models/Delivery';
+import Recipient from '../models/Recipient';
 import File from '../models/File';
 
 class DeliverymanFeaturesController {
   async index(req, res) {
+    const { deliverymanId } = req.params;
     const { page = 1 } = req.query;
-    const deliveryman = await Deliverymen.findAll({
-      offset: (page - 1) * 10,
-      limit: 10,
-      attributes: ['id', 'name', 'email'],
+
+    const deliveries = await Delivery.findAll({
+      where: { canceled_at: null, deliveryman_id: deliverymanId },
+      limit: 20,
+      offset: (page - 1) * 20,
+      attributes: ['id', 'product'],
       include: [
         {
           model: File,
-          as: 'avatar',
+          as: 'signature',
           attributes: ['id', 'path', 'url'],
+        },
+        {
+          model: Deliverymen,
+          as: 'deliveryman',
+          attributes: ['id', 'name', 'email'],
+        },
+        {
+          model: Recipient,
+          as: 'recipient',
+          attributes: [
+            'id',
+            'name',
+            'street',
+            'number',
+            'complement',
+            'state',
+            'city',
+            'zip_code',
+          ],
         },
       ],
     });
-    return res.json(deliveryman);
+
+    return res.json(deliveries);
   }
+
+  /* Delivery order */
 
   async store(req, res) {
-    const schema = Yup.object().shape({
-      name: Yup.string().required(),
-      email: Yup.string()
-        .email()
-        .required(),
+    const { deliverymanId, deliveryId } = req.params;
+
+    const delivery = await Delivery.findOne({
+      where: {
+        deliveryman_id: deliverymanId,
+        id: deliveryId,
+        end_date: null,
+        start_date: { [Op.not]: null },
+      },
     });
 
-    if (!(await schema.isValid(req.body))) {
-      return res.status(400).json({ error: 'Validation fails' });
+    if (!delivery) {
+      return res
+        .status(400)
+        .json({ error: 'There is no delivery for the deliveryman.' });
     }
 
-    const { email } = req.body;
-    const deliverymanExists = await Deliverymen.findOne({
-      where: { email },
-    });
-
-    if (deliverymanExists) {
-      return res.status(400).json({ error: 'Deliveryman already registered!' });
-    }
-
-    const { id, name } = await Deliverymen.create(req.body);
-
-    return res.json({
-      id,
+    const { originalname: name, filename: path } = req.file;
+    const { id } = await File.create({
       name,
-      email,
+      path,
     });
+
+    await delivery.update({ signature_id: id, end_date: new Date() });
+
+    return res.json(delivery);
   }
 
+  /* Delivery pickup */
   async update(req, res) {
-    const schema = Yup.object().shape({
-      name: Yup.string(),
-      email: Yup.string().email(),
+    const { deliverymanId, deliveryId } = req.params;
+
+    const deliveryExists = await Delivery.findOne({
+      where: {
+        deliveryman_id: deliverymanId,
+        id: deliveryId,
+        start_date: null,
+      },
     });
 
-    if (!(await schema.isValid(req.body))) {
-      return res.status(400).json({ error: 'Validation fails' });
+    if (!deliveryExists) {
+      return res
+        .status(400)
+        .json({ error: 'There is no delivery for the deliveryman.' });
     }
 
-    const { email } = req.body;
-    const { deliverymanId } = req.params;
-
-    const deliveryman = await Deliverymen.findByPk(deliverymanId);
-
-    if (!deliveryman) {
-      return res.status(401).json({ error: 'Deliveryman not found.' });
+    const currentHours = getHours(new Date());
+    if (!(currentHours > 8 && currentHours < 18)) {
+      return res.status(400).json({
+        error: 'Withdrawals can only be made between 8 a.m and 6 p.m.',
+      });
     }
 
-    if (email && email !== deliveryman.email) {
-      const deliverymanExists = await Deliverymen.findOne({ where: { email } });
-      if (deliverymanExists) {
-        return res
-          .status(400)
-          .json({ error: 'Deliveryman already registered.' });
-      }
-    }
-
-    const { name } = await deliveryman.update(req.body);
-
-    return res.json({
-      name,
-      email,
+    const delivery = await Delivery.findAll({
+      where: {
+        deliveryman_id: deliverymanId,
+        start_date: {
+          [Op.between]: [startOfDay(new Date()), endOfDay(new Date())],
+        },
+      },
     });
-  }
 
-  async delete(req, res) {
-    const { deliverymanId } = req.params;
-
-    const deliveryman = await Deliverymen.findByPk(deliverymanId);
-
-    if (!deliveryman) {
-      return res.status(401).json({ error: 'Deliveryman not found.' });
+    if (delivery.length > 5) {
+      return res.status(400).json({
+        error: 'Exceeded the maximum limit of 5 withdrawals per day',
+      });
     }
 
-    await deliveryman.destroy();
+    const deliveryUpdate = await Delivery.update(
+      { start_date: new Date() },
+      { where: { id: deliveryId } }
+    );
 
-    return res.json(deliveryman);
+    return res.json(deliveryUpdate);
   }
 }
 
